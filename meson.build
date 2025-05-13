@@ -1,6 +1,5 @@
-# https://mesonbuild.com/
 project(
-    'my-fantastic-simulation-code', # Project name
+    'Sejal-fantastic-simulation-code', # Project name
     ['c', 'cpp'], # Project type. We need a C++ compiler. The C compiler is required for MPI.
     default_options : ['cpp_std=c++17'], # Yes, we need C++17, at least for constexpr
     version : '0.1'
@@ -29,3 +28,4 @@ endif
 subdir('src')
 subdir('executables')
 subdir('tests')
+subdir('milestones')
