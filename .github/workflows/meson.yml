@@ -18,25 +18,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y meson ninja-build cmake pkg-config openmpi-bin libopenmpi-dev
+    - name: Install Meson
+      run: sudo apt-get install -y meson ninja-build openmpi-bin libopenmpi-dev
 
-      - name: Configure Meson
-        # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
-        # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-        run: meson setup ${{github.workspace}}/builddir --buildtype=${{env.BUILD_TYPE}}
+    - name: Configure Meson
+      # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
+      # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
+      run: meson setup ${{github.workspace}}/builddir --buildtype=${{env.BUILD_TYPE}}
 
-      - name: Build
-        working-directory: ${{github.workspace}}/builddir
-        # Build your program with the given configuration
-        run: meson compile
+    - name: Build
+      working-directory: ${{github.workspace}}/builddir
+      # Build your program with the given configuration
+      run: meson compile
 
-      - name: Test
-        working-directory: ${{github.workspace}}/builddir
-        # Execute tests defined by the CMake configuration.
-        # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-        run: meson test
+    - name: Test
+      working-directory: ${{github.workspace}}/builddir
+      # Execute tests defined by the CMake configuration.
+      # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
+      run: meson test
+
