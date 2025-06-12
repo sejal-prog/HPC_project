@@ -1,7 +1,8 @@
 #ifndef LBM_STREAMING_H
 #define LBM_STREAMING_H
 
-#include <Kokkos_Core.hpp>
+#include <vector>
+#include <iostream>
 
 /**
  * @class LBMStreaming
@@ -21,20 +22,20 @@ private:
     int c[Q][2];
 
     /// Distribution function [x][y][direction]
-    Kokkos::View<double***> f;
+    std::vector<std::vector<std::vector<double>>> f;
 
     /// New distribution function after streaming [x][y][direction]
-    Kokkos::View<double***> f_new;
+    std::vector<std::vector<std::vector<double>>> f_new;
 
     /// Density field [x][y]
-    Kokkos::View<double**> rho;
+    std::vector<std::vector<double>> rho;
 
     /// Velocity field [x][y][component(x/y)]
-    Kokkos::View<double***> velocity;
+    std::vector<std::vector<std::vector<double>>> velocity;
 
 public:
     /**
-     * @brief Constructor - initializes Kokkos views and velocity vectors
+     * @brief Constructor - initializes arrays and velocity vectors
      */
     LBMStreaming();
 
@@ -64,7 +65,6 @@ public:
      * @brief Perform streaming step
      *
      * Implements f_i(r+c_i*Δt, t+Δt) = f_i(r,t) with periodic boundaries.
-     * Uses Kokkos::parallel_for for performance.
      */
     void streaming();
 
