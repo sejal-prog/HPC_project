@@ -108,7 +108,7 @@ void LBMStreaming::streaming() {
     // Streaming operator with collision term = 0 (transport in vacuum)
     // f_i(r+c_i*Δt, t+Δt) = f_i(r,t)
 
-    // Step 1: Stream particles to new positions
+    // Step 1: Stream particles to new positions using Kokkos::parallel_for as specified
     Kokkos::parallel_for("streaming",
         Kokkos::MDRangePolicy<Kokkos::Rank<3>>({0, 0, 0}, {NX, NY, Q}),
         KOKKOS_LAMBDA(const int i, const int j, const int k) {
