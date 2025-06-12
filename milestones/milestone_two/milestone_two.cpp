@@ -4,30 +4,38 @@
 /**
  * @brief Main function for Milestone 2 - LBM Streaming Operator
  *
- * This program demonstrates the streaming step of the Lattice Boltzmann Method
- * using the D2Q9 scheme. It simulates particle transport in vacuum (no collisions)
- * with periodic boundary conditions.
+ * This program implements the streaming step of the Lattice Boltzmann Method
+ * as specified in the assignment:
  *
- * Key features:
  * - D2Q9 velocity discretization (9 directions)
- * - Streaming operator: f_i(r+c_i*Δt, t+Δt) = f_i(r,t)
+ * - Streaming operator with collision term = 0 (transport in vacuum)
  * - Periodic boundary conditions
  * - 15x10 grid as specified
- * - File output for visualization
+ * - Uses Kokkos Views as core data structure
+ * - File output for Python/matplotlib visualization
+ *
+ * Focus: Understanding particle transport without interactions
  */
 int main(int argc, char* argv[]) {
-    std::cout << "=== LBM Milestone 2: Streaming Operator ===" << std::endl;
-    std::cout << "Using standard C++ implementation" << std::endl;
+    // Initialize Kokkos runtime as required for Kokkos Views
+    Kokkos::initialize(argc, argv);
+    {
+        std::cout << "=== LBM Milestone 2: Streaming Operator ===" << std::endl;
+        std::cout << "Kokkos initialized successfully" << std::endl;
+        std::cout << "Implementing transport equation in vacuum (no collisions)" << std::endl;
 
-    // Create LBM simulation object
-    LBMStreaming lbm;
+        // Create LBM streaming simulation object
+        LBMStreaming lbm;
 
-    // Run simulation for 10 timesteps
-    lbm.run_simulation(10);
+        // Run simulation for specified number of timesteps
+        lbm.run_simulation(10);
 
-    std::cout << "=== Simulation completed successfully! ===" << std::endl;
-    std::cout << "Generated files: density_*.dat and velocity_*.dat" << std::endl;
-    std::cout << "Use 'python visualize.py' to create plots and animation" << std::endl;
+        std::cout << "=== Milestone 2 completed successfully! ===" << std::endl;
+        std::cout << "Use Python/matplotlib to visualize the results" << std::endl;
+        std::cout << "Suggestion: use streamplot function for velocity field visualization" << std::endl;
+    }
+    // Finalize Kokkos runtime
+    Kokkos::finalize();
 
     return 0;
 }

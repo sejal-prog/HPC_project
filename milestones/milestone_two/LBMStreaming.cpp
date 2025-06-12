@@ -4,18 +4,18 @@
 #include <iomanip>
 
 LBMStreaming::LBMStreaming() :
-    f(NX, std::vector<std::vector<double>>(NY, std::vector<double>(Q, 0.0))),
-    f_new(NX, std::vector<std::vector<double>>(NY, std::vector<double>(Q, 0.0))),
-    rho(NX, std::vector<double>(NY, 0.0)),
-    velocity(NX, std::vector<std::vector<double>>(NY, std::vector<double>(2, 0.0))) {
+    f("f", NX, NY, Q),
+    f_new("f_new", NX, NY, Q),
+    rho("rho", NX, NY),
+    velocity("velocity", NX, NY, 2) {
 
     setup_velocity_vectors();
     initialize();
 }
 
 void LBMStreaming::setup_velocity_vectors() {
-    // D2Q9 velocity vectors
-    c[0][0] = 0;  c[0][1] = 0;   // stationary
+    // D2Q9 velocity vectors as shown in Figure 1a of the specification
+    c[0][0] = 0;  c[0][1] = 0;   // stationary (center)
     c[1][0] = 1;  c[1][1] = 0;   // right
     c[2][0] = 0;  c[2][1] = 1;   // up
     c[3][0] = -1; c[3][1] = 0;   // left
@@ -27,116 +27,139 @@ void LBMStreaming::setup_velocity_vectors() {
 }
 
 void LBMStreaming::initialize() {
-    // Initialize with simple test pattern - particles moving right
-    for (int i = 0; i < NX; i++) {
-        for (int j = 0; j < NY; j++) {
-            // Initialize all distribution functions to zero
-            for (int k = 0; k < Q; k++) {
-                f[i][j][k] = 0.0;
-                f_new[i][j][k] = 0.0;
-            }
+    // Initialize with simple patterns as suggested:
+    // "start with values only in few (or even one) direction"
+    // Think of f_i as "number of particles" at each position and direction
 
-            // Create a simple pattern - particles at center moving right
+    Kokkos::parallel_for("initialize",
+        Kokkos::MDRangePolicy<Kokkos::Rank<3>>({0, 0, 0}, {NX, NY, Q}),
+        KOKKOS_LAMBDA(const int i, const int j, const int k) {
+            // Initialize all distributions to zero
+            f(i, j, k) = 0.0;
+            f_new(i, j, k) = 0.0;
+        });
+
+    // Add simple test pattern: particles at specific locations moving in specific directions
+    Kokkos::parallel_for("set_test_pattern",
+        Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {NX, NY}),
+        KOKKOS_LAMBDA(const int i, const int j) {
+            // Test pattern 1: Particles at center moving right (direction 1)
             if (i >= 6 && i <= 8 && j >= 4 && j <= 5) {
-                f[i][j][1] = 1.0; // Direction 1 is right
-                f[i][j][0] = 0.1; // Some stationary particles
+                f(i, j, 1) = 1.0;  // 1 "particle" moving right
             }
 
-            // Add some particles moving up-right
+            // Test pattern 2: Particles moving up-right (direction 5)
             if (i >= 3 && i <= 5 && j >= 2 && j <= 3) {
-                f[i][j][5] = 0.8; // Direction 5 is up-right
+                f(i, j, 5) = 0.8;  // 0.8 "particles" moving up-right
             }
 
-            // Initialize macroscopic quantities
-            rho[i][j] = 0.0;
-            velocity[i][j][0] = 0.0;
-            velocity[i][j][1] = 0.0;
-        }
-    }
+            // Test pattern 3: Some stationary particles (direction 0)
+            if (i == 7 && j == 7) {
+                f(i, j, 0) = 0.5;  // 0.5 "particles" stationary
+            }
+        });
+
+    Kokkos::fence();
 }
 
 void LBMStreaming::compute_density() {
-    for (int i = 0; i < NX; i++) {
-        for (int j = 0; j < NY; j++) {
+    // Density: ρ(x,y) = Σ f_i(x,y) - sum over all directions
+    Kokkos::parallel_for("compute_density",
+        Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {NX, NY}),
+        KOKKOS_LAMBDA(const int i, const int j) {
             double sum = 0.0;
             for (int k = 0; k < Q; k++) {
-                sum += f[i][j][k];
+                sum += f(i, j, k);
             }
-            rho[i][j] = sum;
-        }
-    }
+            rho(i, j) = sum;
+        });
+
+    Kokkos::fence();
 }
 
 void LBMStreaming::compute_velocity() {
-    for (int i = 0; i < NX; i++) {
-        for (int j = 0; j < NY; j++) {
+    // Velocity: u(x,y) = (1/ρ) * Σ f_i(x,y) * c_i
+    Kokkos::parallel_for("compute_velocity",
+        Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0, 0}, {NX, NY}),
+        KOKKOS_LAMBDA(const int i, const int j) {
             double vx = 0.0, vy = 0.0;
 
-            // Calculate momentum
+            // Calculate momentum: Σ f_i * c_i
             for (int k = 0; k < Q; k++) {
-                vx += f[i][j][k] * c[k][0];
-                vy += f[i][j][k] * c[k][1];
+                vx += f(i, j, k) * c[k][0];
+                vy += f(i, j, k) * c[k][1];
             }
 
             // Normalize by density to get velocity
-            if (rho[i][j] > 1e-10) {
-                velocity[i][j][0] = vx / rho[i][j];
-                velocity[i][j][1] = vy / rho[i][j];
+            if (rho(i, j) > 1e-10) {
+                velocity(i, j, 0) = vx / rho(i, j);
+                velocity(i, j, 1) = vy / rho(i, j);
             } else {
-                velocity[i][j][0] = 0.0;
-                velocity[i][j][1] = 0.0;
+                velocity(i, j, 0) = 0.0;
+                velocity(i, j, 1) = 0.0;
             }
-        }
-    }
+        });
+
+    Kokkos::fence();
 }
 
 void LBMStreaming::streaming() {
-    // Copy current distribution to new array with streaming
-    for (int i = 0; i < NX; i++) {
-        for (int j = 0; j < NY; j++) {
-            for (int k = 0; k < Q; k++) {
-                // Calculate source position with periodic boundary conditions
-                int src_x = (i - c[k][0] + NX) % NX;
-                int src_y = (j - c[k][1] + NY) % NY;
+    // THE MAIN FOCUS OF THIS MILESTONE
+    // Streaming operator with collision term = 0 (transport in vacuum)
+    // f_i(r+c_i*Δt, t+Δt) = f_i(r,t)
 
-                // Stream: f_new at current position gets f from source position
-                f_new[i][j][k] = f[src_x][src_y][k];
-            }
-        }
-    }
+    // Step 1: Stream particles to new positions
+    Kokkos::parallel_for("streaming",
+        Kokkos::MDRangePolicy<Kokkos::Rank<3>>({0, 0, 0}, {NX, NY, Q}),
+        KOKKOS_LAMBDA(const int i, const int j, const int k) {
+            // Calculate source position (where this particle came from)
+            // Apply periodic boundary conditions
+            int src_x = (i - c[k][0] + NX) % NX;
+            int src_y = (j - c[k][1] + NY) % NY;
 
-    // Copy new distribution back to original array
-    for (int i = 0; i < NX; i++) {
-        for (int j = 0; j < NY; j++) {
-            for (int k = 0; k < Q; k++) {
-                f[i][j][k] = f_new[i][j][k];
-            }
-        }
-    }
+            // Stream: f_new at destination gets f from source
+            f_new(i, j, k) = f(src_x, src_y, k);
+        });
+
+    // Step 2: Copy streamed values back to original array
+    Kokkos::parallel_for("copy_back",
+        Kokkos::MDRangePolicy<Kokkos::Rank<3>>({0, 0, 0}, {NX, NY, Q}),
+        KOKKOS_LAMBDA(const int i, const int j, const int k) {
+            f(i, j, k) = f_new(i, j, k);
+        });
+
+    Kokkos::fence();
 }
 
 void LBMStreaming::write_fields(int timestep) {
+    // Copy data to host for file output
+    auto h_rho = Kokkos::create_mirror_view(rho);
+    auto h_velocity = Kokkos::create_mirror_view(velocity);
+
+    Kokkos::deep_copy(h_rho, rho);
+    Kokkos::deep_copy(h_velocity, velocity);
+
     // Write density field
     std::string rho_filename = "density_" + std::to_string(timestep) + ".dat";
     std::ofstream rho_file(rho_filename);
     rho_file << std::scientific << std::setprecision(6);
 
-    for (int j = NY-1; j >= 0; j--) { // Write from top to bottom for visualization
+    for (int j = NY-1; j >= 0; j--) { // Top to bottom for visualization
         for (int i = 0; i < NX; i++) {
-            rho_file << rho[i][j] << " ";
+            rho_file << h_rho(i, j) << " ";
         }
         rho_file << "\n";
     }
     rho_file.close();
 
-    // Write velocity field
+    // Write velocity field for matplotlib streamplot visualization
     std::string vel_filename = "velocity_" + std::to_string(timestep) + ".dat";
     std::ofstream vel_file(vel_filename);
     vel_file << std::scientific << std::setprecision(6);
 
-    for (int j = NY-1; j >= 0; j--) { // Write from top to bottom for visualization
+    for (int j = NY-1; j >= 0; j--) { // Top to bottom for visualization
         for (int i = 0; i < NX; i++) {
-            vel_file << velocity[i][j][0] << " " << velocity[i][j][1] << " ";
+            vel_file << h_velocity(i, j, 0) << " " << h_velocity(i, j, 1) << " ";
         }
         vel_file << "\n";
     }
@@ -146,16 +169,18 @@ void LBMStreaming::write_fields(int timestep) {
 }
 
 void LBMStreaming::run_simulation(int num_timesteps) {
-    std::cout << "Starting LBM Streaming Simulation (Standard C++ implementation)" << std::endl;
-    std::cout << "Grid size: " << NX << "x" << NY << std::endl;
+    std::cout << "=== LBM Milestone 2: Streaming Operator ===" << std::endl;
+    std::cout << "Transport equation in vacuum (collision term = 0)" << std::endl;
+    std::cout << "Grid size: " << NX << "x" << NY << " (as specified)" << std::endl;
+    std::cout << "Using Kokkos Views as core data structure" << std::endl;
     std::cout << "Timesteps: " << num_timesteps << std::endl;
 
     for (int t = 0; t <= num_timesteps; t++) {
-        // Compute macroscopic quantities
+        // Compute macroscopic quantities from distribution function
         compute_density();
         compute_velocity();
 
-        // Output fields every 2 timesteps
+        // Output fields every 2 timesteps for visualization
         if (t % 2 == 0) {
             write_fields(t);
         }
@@ -167,4 +192,7 @@ void LBMStreaming::run_simulation(int num_timesteps) {
 
         std::cout << "Completed timestep " << t << std::endl;
     }
+
+    std::cout << "=== Streaming simulation completed! ===" << std::endl;
+    std::cout << "Generated files for Python/matplotlib visualization" << std::endl;
 }
